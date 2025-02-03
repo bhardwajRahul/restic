@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"fmt"
 	"hash"
 	"io"
 	"net/http"
@@ -28,7 +29,7 @@ func NewFactory() location.Factory {
 
 	return location.NewHTTPBackendFactory[struct{}, *MemoryBackend](
 		"mem",
-		func(s string) (*struct{}, error) {
+		func(_ string) (*struct{}, error) {
 			return &struct{}{}, nil
 		},
 		location.NoPassword,
@@ -41,7 +42,8 @@ func NewFactory() location.Factory {
 	)
 }
 
-var errNotFound = errors.New("not found")
+var errNotFound = fmt.Errorf("not found")
+var errTooSmall = errors.New("access beyond end of file")
 
 const connectionCount = 2
 
@@ -66,6 +68,10 @@ func New() *MemoryBackend {
 // IsNotExist returns true if the file does not exist.
 func (be *MemoryBackend) IsNotExist(err error) bool {
 	return errors.Is(err, errNotFound)
+}
+
+func (be *MemoryBackend) IsPermanentError(err error) bool {
+	return be.IsNotExist(err) || errors.Is(err, errTooSmall)
 }
 
 // Save adds new Data to the backend.
@@ -130,12 +136,12 @@ func (be *MemoryBackend) openReader(ctx context.Context, h backend.Handle, lengt
 	}
 
 	buf := be.data[h]
-	if offset > int64(len(buf)) {
-		return nil, errors.New("offset beyond end of file")
+	if offset+int64(length) > int64(len(buf)) {
+		return nil, errTooSmall
 	}
 
 	buf = buf[offset:]
-	if length > 0 && len(buf) > length {
+	if length > 0 {
 		buf = buf[:length]
 	}
 
@@ -216,11 +222,6 @@ func (be *MemoryBackend) Connections() uint {
 	return connectionCount
 }
 
-// Location returns the location of the backend (RAM).
-func (be *MemoryBackend) Location() string {
-	return "RAM"
-}
-
 // Hasher may return a hash function for calculating a content hash for the backend
 func (be *MemoryBackend) Hasher() hash.Hash {
 	return xxhash.New()
@@ -248,3 +249,9 @@ func (be *MemoryBackend) Delete(ctx context.Context) error {
 func (be *MemoryBackend) Close() error {
 	return nil
 }
+
+// Warmup not implemented
+func (be *MemoryBackend) Warmup(_ context.Context, _ []backend.Handle) ([]backend.Handle, error) {
+	return []backend.Handle{}, nil
+}
+func (be *MemoryBackend) WarmupWait(_ context.Context, _ []backend.Handle) error { return nil }

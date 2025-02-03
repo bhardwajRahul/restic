@@ -13,14 +13,16 @@ import (
 type Backend struct {
 	CloseFn            func() error
 	IsNotExistFn       func(err error) bool
+	IsPermanentErrorFn func(err error) bool
 	SaveFn             func(ctx context.Context, h backend.Handle, rd backend.RewindReader) error
 	OpenReaderFn       func(ctx context.Context, h backend.Handle, length int, offset int64) (io.ReadCloser, error)
 	StatFn             func(ctx context.Context, h backend.Handle) (backend.FileInfo, error)
 	ListFn             func(ctx context.Context, t backend.FileType, fn func(backend.FileInfo) error) error
 	RemoveFn           func(ctx context.Context, h backend.Handle) error
 	DeleteFn           func(ctx context.Context) error
+	WarmupFn           func(ctx context.Context, h []backend.Handle) ([]backend.Handle, error)
+	WarmupWaitFn       func(ctx context.Context, h []backend.Handle) error
 	ConnectionsFn      func() uint
-	LocationFn         func() string
 	HasherFn           func() hash.Hash
 	HasAtomicReplaceFn func() bool
 }
@@ -48,15 +50,6 @@ func (m *Backend) Connections() uint {
 	return m.ConnectionsFn()
 }
 
-// Location returns a location string.
-func (m *Backend) Location() string {
-	if m.LocationFn == nil {
-		return ""
-	}
-
-	return m.LocationFn()
-}
-
 // Hasher may return a hash function for calculating a content hash for the backend
 func (m *Backend) Hasher() hash.Hash {
 	if m.HasherFn == nil {
@@ -81,6 +74,14 @@ func (m *Backend) IsNotExist(err error) bool {
 	}
 
 	return m.IsNotExistFn(err)
+}
+
+func (m *Backend) IsPermanentError(err error) bool {
+	if m.IsPermanentErrorFn == nil {
+		return false
+	}
+
+	return m.IsPermanentErrorFn(err)
 }
 
 // Save data in the backend.
@@ -149,6 +150,22 @@ func (m *Backend) Delete(ctx context.Context) error {
 	}
 
 	return m.DeleteFn(ctx)
+}
+
+func (m *Backend) Warmup(ctx context.Context, h []backend.Handle) ([]backend.Handle, error) {
+	if m.WarmupFn == nil {
+		return []backend.Handle{}, errors.New("not implemented")
+	}
+
+	return m.WarmupFn(ctx, h)
+}
+
+func (m *Backend) WarmupWait(ctx context.Context, h []backend.Handle) error {
+	if m.WarmupWaitFn == nil {
+		return errors.New("not implemented")
+	}
+
+	return m.WarmupWaitFn(ctx, h)
 }
 
 // Make sure that Backend implements the backend interface.

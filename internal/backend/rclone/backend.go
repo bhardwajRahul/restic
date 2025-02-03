@@ -94,7 +94,7 @@ func run(command string, args ...string) (*StdioConn, *sync.WaitGroup, chan stru
 		err = errW
 	}
 	if err != nil {
-		if util.IsErrDot(err) {
+		if errors.Is(err, exec.ErrDot) {
 			return nil, nil, nil, nil, errors.Errorf("cannot implicitly run relative executable %v found in current directory, use -o rclone.program=./<program> to override", cmd.Path)
 		}
 		return nil, nil, nil, nil, err
@@ -183,7 +183,7 @@ func newBackend(ctx context.Context, cfg Config, lim limiter.Limiter) (*Backend,
 	dialCount := 0
 	tr := &http2.Transport{
 		AllowHTTP: true, // this is not really HTTP, just stdin/stdout
-		DialTLS: func(network, address string, cfg *tls.Config) (net.Conn, error) {
+		DialTLS: func(network, address string, _ *tls.Config) (net.Conn, error) {
 			debug.Log("new connection requested, %v %v", network, address)
 			if dialCount > 0 {
 				// the connection to the child process is already closed
@@ -252,6 +252,7 @@ func newBackend(ctx context.Context, cfg Config, lim limiter.Limiter) (*Backend,
 		return nil, fmt.Errorf("error talking HTTP to rclone: %w", err)
 	}
 
+	_ = res.Body.Close()
 	debug.Log("HTTP status %q returned, moving instance to background", res.Status)
 	err = bg()
 	if err != nil {
@@ -339,3 +340,9 @@ func (be *Backend) Close() error {
 	debug.Log("wait for rclone returned: %v", be.waitResult)
 	return be.waitResult
 }
+
+// Warmup not implemented
+func (be *Backend) Warmup(_ context.Context, _ []backend.Handle) ([]backend.Handle, error) {
+	return []backend.Handle{}, nil
+}
+func (be *Backend) WarmupWait(_ context.Context, _ []backend.Handle) error { return nil }

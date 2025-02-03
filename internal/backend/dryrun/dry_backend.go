@@ -46,11 +46,6 @@ func (be *Backend) Connections() uint {
 	return be.b.Connections()
 }
 
-// Location returns the location of the backend.
-func (be *Backend) Location() string {
-	return "DRY:" + be.b.Location()
-}
-
 // Delete removes all data in the backend.
 func (be *Backend) Delete(_ context.Context) error {
 	return nil
@@ -72,6 +67,10 @@ func (be *Backend) IsNotExist(err error) bool {
 	return be.b.IsNotExist(err)
 }
 
+func (be *Backend) IsPermanentError(err error) bool {
+	return be.b.IsPermanentError(err)
+}
+
 func (be *Backend) List(ctx context.Context, t backend.FileType, fn func(backend.FileInfo) error) error {
 	return be.b.List(ctx, t, fn)
 }
@@ -83,3 +82,9 @@ func (be *Backend) Load(ctx context.Context, h backend.Handle, length int, offse
 func (be *Backend) Stat(ctx context.Context, h backend.Handle) (backend.FileInfo, error) {
 	return be.b.Stat(ctx, h)
 }
+
+// Warmup should not occur during dry-runs.
+func (be *Backend) Warmup(_ context.Context, _ []backend.Handle) ([]backend.Handle, error) {
+	return []backend.Handle{}, nil
+}
+func (be *Backend) WarmupWait(_ context.Context, _ []backend.Handle) error { return nil }
